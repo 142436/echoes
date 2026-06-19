@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ECHOES - Psychological Horror</title>
+    <style>
+        :root {
+            --bg-color: #020202;
+            --text-color: #e0e0e0;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: crosshair;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Fixed CRT Scanline Effect (Prevents screen split bug) */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            box-shadow: inset 0 0 250px rgba(0,0,0,1);
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.15),
+                rgba(0, 0, 0, 0.15) 2px,
+                transparent 2px,
+                transparent 4px
+            );
+            z-index: 10;
+            mix-blend-mode: overlay;
+        }
+
+        .noise-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 11;
+            opacity: 0.04;
+            background-image: url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)"/%3E%3C/svg%3E');
+            transition: opacity 2s ease-in-out;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            text-shadow: 2px 2px 0px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 4px;
+        }
+
+        .hud-message {
+            text-align: center;
+            font-size: 1.5rem;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 2px 2px 5px #000;
+            opacity: 0;
+            transition: opacity 2s ease-in-out;
+            margin-top: 15vh;
+            letter-spacing: 6px;
+        }
+
+        /* Screens */
+        #menu-screen, #death-screen, #win-screen, #level-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(2, 2, 3, 0.98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: background-color 3s ease-in-out;
+        }
+
+        h1 {
+            font-size: 3rem;
+            letter-spacing: 15px;
+            margin-bottom: 20px;
+            color: #fff;
+            font-weight: lighter;
+            opacity: 0.8;
+        }
+
+        p {
+            font-size: 1rem;
+            max-width: 600px;
+            line-height: 1.8;
+            margin-bottom: 30px;
+            color: #777;
+            letter-spacing: 1px;
+        }
+
+        .level-select-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 1rem;
+            background: transparent;
+            color: #888;
+            border: 1px solid #444;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            pointer-events: auto;
+        }
+
+        .btn:hover {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+            box-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+
+        /* Psychological Death Screen */
+        #death-screen { background-color: #000; }
+        #death-screen h1 {
+            font-size: 1.5rem;
+            letter-spacing: 10px;
+            color: #444;
+            text-shadow: none;
+            animation: slowFade 5s forwards;
+        }
+
+        @keyframes slowFade { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+        .glitch-text { animation: subtle-glitch 0.3s linear infinite; }
+
+        @keyframes subtle-glitch {
+            0% { transform: translate(0); opacity: 0.5; }
+            20% { transform: translate(-1px, 1px); opacity: 0.8; }
+            40% { transform: translate(1px, -1px); opacity: 0.4; }
+            60% { transform: translate(0, 0); opacity: 0.7; }
+            80% { transform: translate(-1px, 0); opacity: 0.3; }
+            100% { transform: translate(0); opacity: 0.5; }
+        }
+
+        #jumpscare-container {
+            position: absolute; top:0; left:0; width: 100%; height: 100%; z-index: 100;
+            display: none; background: #000;
+            background-size: cover; background-position: center;
+            mix-blend-mode: difference;
+            animation: violent-shake 0.04s infinite, noise-strobe 0.08s infinite;
+        }
+
+        @keyframes noise-strobe {
+            0% { filter: invert(0) contrast(300%) brightness(150%); }
+            50% { filter: invert(1) contrast(400%) brightness(100%); }
+            100% { filter: invert(0) contrast(300%) brightness(150%); }
+        }
+
+        @keyframes violent-shake {
+            0% { transform: translate(15px, 10px) scale(1.2) rotate(2deg); }
+            50% { transform: translate(-20px, -15px) scale(1.1) rotate(-3deg); }
+            100% { transform: translate(15px, 20px) scale(1.3) rotate(1deg); }
+        }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            position: absolute; bottom: 40px; left: 40px; width: 160px; height: 160px;
+            display: none; z-index: 30; pointer-events: auto;
+        }
+        .dpad-row { display: flex; justify-content: center; width: 100%; height: 50px; }
+        .dpad-btn {
+            width: 50px; height: 50px; background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;
+            display: flex; justify-content: center; align-items: center;
+            color: rgba(255, 255, 255, 0.3); font-size: 20px; margin: 4px; touch-action: none;
+        }
+        .dpad-btn:active { background: rgba(255, 255, 255, 0.2); }
+
+        @media (max-width: 768px) {
+            #mobile-controls { display: flex; flex-direction: column; }
+            .hud-top { font-size: 0.8rem; }
+            .btn { padding: 10px 15px; font-size: 0.9rem; letter-spacing: 2px; }
+            .level-select-container { flex-direction: column; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="overlay" id="screenOverlay"></div>
+    <div class="noise-overlay" id="noiseLayer"></div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <span id="level-text" style="color: #888;">Level 1</span>
+            <span id="memories-text">Fragments: 0/8</span>
+            <span id="sanity-text">Lucidity: 100%</span>
+        </div>
+        <div class="hud-message" id="center-message"></div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls">
+        <div class="dpad-row"><div class="dpad-btn" id="btn-up">W</div></div>
+        <div class="dpad-row">
+            <div class="dpad-btn" id="btn-left">A</div><div style="width: 50px; margin: 4px;"></div><div class="dpad-btn" id="btn-right">D</div>
+        </div>
+        <div class="dpad-row"><div class="dpad-btn" id="btn-down">S</div></div>
+    </div>
+
+    <!-- Start Menu with Level Select -->
+    <div id="menu-screen">
+        <h1>ECHOES</h1>
+        <p>You are wandering through the architecture of your own fading mind.<br>Find the 8 fragments on each floor to descend.<br>Use your mouse/touch to aim your light.</p>
+        <div class="level-select-container">
+            <button class="btn" id="btn-lvl-1">Level 1: The Void</button>
+            <button class="btn" id="btn-lvl-2">Level 2: Yellow Halls</button>
+            <button class="btn" id="btn-lvl-3">Level 3: White Ward</button>
+        </div>
+    </div>
+
+    <div id="level-screen" style="display: none;">
+        <h1 id="level-title" style="color: #fff;">LEVEL COMPLETE</h1>
+        <p id="level-desc">The architecture shifts. You are descending further.</p>
+        <button class="btn" id="next-level-btn">Proceed</button>
+    </div>
+
+    <div id="death-screen" style="display: none;">
+        <h1 id="death-text" style="opacity: 0;">There is nothing left here.</h1>
+        <button class="btn" id="restart-btn" style="opacity: 0; transition: opacity 3s; margin-top: 50px;">Begin Again</button>
+    </div>
+
+    <div id="win-screen" style="display: none;">
+        <h1 style="color: #aaa;">AWAKENED</h1>
+        <p>You survived the depths of your own mind. The cycle is broken.</p>
+        <button class="btn" id="replay-btn">Return to the Void</button>
+    </div>
+
+    <div id="jumpscare-container"></div>
+
+    <script>
+        /** --- CONFIGURATIONS --- **/
+        const LEVEL_CONFIGS = {
+            1: {
+                name: "The Void",
+                floorBase: '#060608', floorGrit: '#0a0a0f', wallBase: '#1c1c24', wallOuter: '#2a2a38', wallCore: '#0a0a0d',
+                lightMask: 'rgba(2, 2, 3,', ambientGlow: 'rgba(255,255,255,0.3)', fragAura: 'rgba(255, 255, 255, ',
+                audioFreq: 45, audioType: 'sine'
+            },
+            2: {
+                name: "The Yellow Halls",
+                floorBase: '#70643b', floorGrit: '#5e532b', wallBase: '#a8985c', wallOuter: '#c2b274', wallCore: '#4a4121',
+                lightMask: 'rgba(15, 12, 5,', ambientGlow: 'rgba(255,230,150,0.3)', fragAura: 'rgba(255, 220, 100, ',
+                audioFreq: 60, audioType: 'sawtooth'
+            },
+            3: {
+                name: "The White Ward",
+                floorBase: '#b0b5b5', floorGrit: '#9ba0a0', wallBase: '#e0e5e5', wallOuter: '#ffffff', wallCore: '#7a8080',
+                lightMask: 'rgba(4, 5, 6,', ambientGlow: 'rgba(200,220,255,0.4)', fragAura: 'rgba(150, 200, 255, ',
+                audioFreq: 150, audioType: 'triangle'
+            }
+        };
+
+        // Unique Sequential Messages per level
+        const levelMessages = {
+            1: [
+                "The void shifts...", "I can't feel my hands.", "Is it watching me?", "It doesn't have a shape.",
+                "The air is heavy.", "My memories are slipping.", "Almost whole again.", "Just one more."
+            ],
+            2: [
+                "The walls are weeping.", "The buzzing is deafening.", "It moves when I blink.", "Don't turn around.",
+                "I hear footsteps.", "The shadow is glitching.", "Keep the light on it.", "It's right behind me."
+            ],
+            3: [
+                "It smells like bleach.", "So cold here.", "Don't take your eyes off it.", "It hates the light.",
+                "It froze when I looked.", "Walking backwards.", "The ringing hurts.", "I need to wake up."
+            ]
+        };
+
+        // Unique Jumpscare SVG Visuals
+        const JUMPSCARE_IMAGES = {
+            1: `url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="6" numOctaves="4" stitchTiles="stitch"/%3E%3CfeColorMatrix type="matrix" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 5 -2"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)" opacity="1"/%3E%3C/svg%3E'), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M-10,50 L110,10 L-20,80 L120,40 L-10,90 L110,80 L50,-10 L40,110 L60,-20 L70,120 M10,10 L90,90 M90,10 L10,90 M50,0 L50,100 M0,50 L100,50" stroke="white" stroke-width="3" fill="none"/><polygon points="15,25 35,85 85,15 65,95 45,45 75,75" fill="white"/></svg>')`,
+            2: `url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="4" numOctaves="2" stitchTiles="stitch"/%3E%3CfeColorMatrix type="matrix" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 4 -1"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)" opacity="0.8"/%3E%3C/svg%3E'), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="black"/><path d="M 40 100 L 45 30 L 30 20 L 50 5 L 70 20 L 55 30 L 60 100 Z" fill="white"/><circle cx="45" cy="15" r="3" fill="black"/><circle cx="55" cy="15" r="3" fill="black"/></svg>')`,
+            3: `url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="8" numOctaves="1" stitchTiles="stitch"/%3E%3CfeColorMatrix type="matrix" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 3 -1"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)" opacity="0.5"/%3E%3C/svg%3E'), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="black"/><ellipse cx="50" cy="50" rx="40" ry="50" fill="%23e0e0e0"/><circle cx="30" cy="45" r="10" fill="black"/><circle cx="70" cy="45" r="10" fill="black"/><circle cx="30" cy="45" r="2" fill="white"/><circle cx="70" cy="45" r="2" fill="white"/><path d="M 40 80 Q 50 100 60 80 Z" fill="black"/></svg>')`
+        };
+
+        let currentLevel = 1;
+
+        /** --- AUDIO ENGINE --- **/
+        class HorrorAudio {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.connect(this.ctx.destination);
+                this.masterGain.gain.value = 0.5;
+
+                this.rumbleOsc = this.ctx.createOscillator();
+                this.rumbleOsc.type = 'sine';
+                this.rumbleOsc.frequency.value = 45;
+                
+                this.rumbleGain = this.ctx.createGain();
+                this.rumbleGain.gain.value = 0; 
+                this.rumbleOsc.connect(this.rumbleGain);
+                this.rumbleGain.connect(this.masterGain);
+                this.rumbleOsc.start();
+
+                const bufferSize = this.ctx.sampleRate * 2;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = (Math.random() * 2 - 1) * (Math.random() > 0.5 ? 1 : 0.2);
+                }
+                
+                this.noiseSource = this.ctx.createBufferSource();
+                this.noiseSource.buffer = noiseBuffer;
+                this.noiseSource.loop = true;
+                
+                this.noiseFilter = this.ctx.createBiquadFilter();
+                this.noiseFilter.type = 'lowpass';
+                this.noiseFilter.frequency.value = 200;
+
+                this.noiseGain = this.ctx.createGain();
+                this.noiseGain.gain.value = 0;
+                
+                this.noiseSource.connect(this.noiseFilter);
+                this.noiseFilter.connect(this.noiseGain);
+                this.noiseGain.connect(this.masterGain);
+                this.noiseSource.start();
+
+                this.isStarted = true;
+                this.dying = false;
+            }
+
+            setLevelTheme(level) {
+                const config = LEVEL_CONFIGS[level];
+                this.rumbleOsc.type = config.audioType;
+                this.rumbleOsc.frequency.setTargetAtTime(config.audioFreq, this.ctx.currentTime, 0.5);
+            }
+
+            update(sanity, monsterDistance) {
+                if(this.ctx.state === 'suspended' || this.dying) return;
+
+                const sanityFactor = 1 - (sanity / 100);
+                const config = LEVEL_CONFIGS[currentLevel];
+                
+                this.rumbleGain.gain.setTargetAtTime(0.2 + (sanityFactor * 0.8), this.ctx.currentTime, 1.0);
+                this.rumbleOsc.frequency.setTargetAtTime(config.audioFreq - (sanityFactor * 15), this.ctx.currentTime, 1.0);
+
+                let noiseLevel = 0;
+                let noiseFreq = 200;
+                if (monsterDistance < 800) {
+                    noiseLevel = Math.pow(1 - (monsterDistance / 800), 2);
+                    noiseFreq = 200 + (noiseLevel * 4000);
+                }
+
+                this.noiseGain.gain.setTargetAtTime(noiseLevel * 0.3, this.ctx.currentTime, 0.5);
+                this.noiseFilter.frequency.setTargetAtTime(noiseFreq, this.ctx.currentTime, 0.5);
+            }
+
+            playJumpscare(level) {
+                this.dying = true;
+                const now = this.ctx.currentTime;
+                
+                this.masterGain.gain.cancelScheduledValues(now);
+                this.masterGain.gain.setValueAtTime(1.0, now);
+                
+                const distortion = this.ctx.createWaveShaper();
+                const curve = new Float32Array(400);
+                for (let i = 0; i < 400; ++i) {
+                    const x = i * 2 / 400 - 1;
+                    curve[i] = (Math.PI + 50) * x / (Math.PI + 50 * Math.abs(x));
+                }
+                distortion.curve = curve;
+                distortion.oversample = '4x';
+                distortion.connect(this.masterGain);
+
+                const screamGain = this.ctx.createGain();
+                screamGain.gain.setValueAtTime(3.0, now);
+                screamGain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
+                screamGain.connect(distortion);
+
+                // Differentiate Audio per level
+                if (level === 1) {
+                    // Level 1: Distorted Roar
+                    [800, 1200, 2000, 3500].forEach((freq, i) => {
+                        const osc = this.ctx.createOscillator();
+                        osc.type = i % 2 === 0 ? 'sawtooth' : 'square';
+                        osc.frequency.setValueAtTime(freq * 1.5, now);
+                        osc.frequency.exponentialRampToValueAtTime(freq * 0.2, now + 1.0);
+
+                        const vibrato = this.ctx.createOscillator();
+                        vibrato.type = 'square'; vibrato.frequency.value = 50 + (i * 20); 
+                        const vibratoGain = this.ctx.createGain(); vibratoGain.gain.value = 0.5;
+                        vibrato.connect(vibratoGain.gain);
+
+                        osc.connect(vibratoGain); vibratoGain.connect(screamGain);
+                        osc.start(now); vibrato.start(now); osc.stop(now + 1.1); vibrato.stop(now + 1.1);
+                    });
+                } else if (level === 2) {
+                    // Level 2: Stuttering Glitch Burst
+                    [400, 800].forEach((freq, i) => {
+                        const osc = this.ctx.createOscillator();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(freq, now);
+                        
+                        const stutter = this.ctx.createOscillator();
+                        stutter.type = 'square'; stutter.frequency.value = 30; // Fast stutter
+                        const stutterGain = this.ctx.createGain();
+                        stutter.connect(stutterGain.gain); stutterGain.gain.value = 1.0;
+
+                        osc.connect(stutterGain); stutterGain.connect(screamGain);
+                        osc.start(now); stutter.start(now); osc.stop(now + 1.1); stutter.stop(now + 1.1);
+                    });
+                } else {
+                    // Level 3: Deafening Medical Alarm Ringing
+                    [2500, 2600, 2800].forEach((freq) => {
+                        const osc = this.ctx.createOscillator();
+                        osc.type = 'triangle'; // Piercing
+                        osc.frequency.setValueAtTime(freq, now);
+                        osc.connect(screamGain);
+                        osc.start(now); osc.stop(now + 1.1);
+                    });
+                }
+
+                // Add White Noise Burst to all jumpscares
+                const bufferSize = this.ctx.sampleRate * 2;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+                
+                const noiseSource = this.ctx.createBufferSource();
+                noiseSource.buffer = noiseBuffer;
+                
+                const noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'highpass';
+                noiseFilter.frequency.setValueAtTime(2000, now);
+                noiseFilter.frequency.linearRampToValueAtTime(500, now + 0.8);
+                
+                const noiseGain = this.ctx.createGain();
+                noiseGain.gain.setValueAtTime(4.0, now); 
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
+                
+                noiseSource.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(distortion); 
+                noiseSource.start(now); noiseSource.stop(now + 1.1);
+
+                this.noiseGain.gain.setTargetAtTime(0, now + 1.0, 0.05);
+                this.masterGain.gain.setTargetAtTime(0, now + 1.1, 0.05);
+            }
+
+            stopAll() {
+                this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+                this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+            }
+        }
+
+        /** --- GRAPHICS & GAME ENGINE --- **/
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const lightCanvas = document.createElement('canvas');
+        const lightCtx = lightCanvas.getContext('2d');
+        
+        let audio;
+        let gameLoopId;
+        let isPlaying = false;
+        
+        // Increased player speed to give you a fighting chance to escape
+        const TILE_SIZE = 80;
+        const PLAYER_SPEED = 3.6; 
+        const MONSTER_SPEED = 1.6;
+        
+        const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+        let mouseX = window.innerWidth / 2;
+        let mouseY = window.innerHeight / 2;
+        let usingMouse = false;
+
+        let player = { x: 0, y: 0, radius: 10, sanity: 100, angle: 0 };
+        let entity = { x: 0, y: 0, active: false, phase: 0, history: [] };
+        let camera = { x: 0, y: 0 };
+        let memories = [];
+        let particles = [];
+        let mapData = [];
+        let mapCols = 60; 
+        let mapRows = 60;
+        let memoriesCollected = 0;
+        let maxMemories = 8; 
+        let tick = 0;
+        let deathTimer = 0;
+
+        function generateMap(cols, rows) {
+            let map = Array(rows).fill().map(() => Array(cols).fill(1));
+            let currX = Math.floor(cols/2);
+            let currY = Math.floor(rows/2);
+            map[currY][currX] = 0;
+            
+            for(let i=0; i < (cols*rows)*0.5; i++) {
+                let dir = Math.floor(Math.random() * 4);
+                if(dir === 0 && currY > 3) currY--;
+                else if(dir === 1 && currY < rows-4) currY++;
+                else if(dir === 2 && currX > 3) currX--;
+                else if(dir === 3 && currX < cols-4) currX++;
+                
+                map[currY][currX] = 0;
+                
+                if(Math.random() < 0.05) {
+                    for(let ry=-1; ry<=1; ry++) {
+                        for(let rx=-1; rx<=1; rx++) {
+                            map[currY+ry][currX+rx] = 0;
+                        }
+                    }
+                }
+            }
+
+            for(let y=0; y<rows; y++) { map[y][0] = 1; map[y][cols-1] = 1; }
+            for(let x=0; x<cols; x++) { map[0][x] = 1; map[rows-1][x] = 1; }
+            return map;
+        }
+
+        function initGame() {
+            resizeCanvas();
+            mapData = generateMap(mapCols, mapRows);
+            
+            let placed = false;
+            for(let y=Math.floor(mapRows/2); y<mapRows-2 && !placed; y++) {
+                for(let x=Math.floor(mapCols/2); x<mapCols-2 && !placed; x++) {
+                    if(mapData[y][x] === 0) {
+                        player.x = x * TILE_SIZE + TILE_SIZE/2;
+                        player.y = y * TILE_SIZE + TILE_SIZE/2;
+                        placed = true;
+                    }
+                }
+            }
+            player.sanity = 100;
+            player.angle = 0;
+            
+            entity.x = (mapCols - 2) * TILE_SIZE;
+            entity.y = (mapRows - 2) * TILE_SIZE;
+            entity.active = false;
+            entity.history = [];
+            
+            memories = [];
+            memoriesCollected = 0;
+            
+            let attempts = 0;
+            let minPlayerDist = TILE_SIZE * 20;
+            let minFragDist = TILE_SIZE * 15;
+            
+            while(memories.length < maxMemories && attempts < 2000) {
+                attempts++;
+                let rx = Math.floor(Math.random() * (mapCols - 4)) + 2;
+                let ry = Math.floor(Math.random() * (mapRows - 4)) + 2;
+                
+                if (mapData[ry][rx] === 0) {
+                    let px = rx * TILE_SIZE + TILE_SIZE/2;
+                    let py = ry * TILE_SIZE + TILE_SIZE/2;
+                    let distToPlayer = Math.hypot(player.x - px, player.y - py);
+                    
+                    let tooCloseToOther = false;
+                    for (let m of memories) {
+                        if (Math.hypot(m.x - px, m.y - py) < minFragDist) {
+                            tooCloseToOther = true; break;
+                        }
+                    }
+
+                    if(!tooCloseToOther && distToPlayer > minPlayerDist) {
+                        memories.push({ x: px, y: py, active: true, offset: Math.random() * Math.PI * 2 });
+                    }
+                }
+                
+                if (attempts % 100 === 0) {
+                    minPlayerDist = Math.max(TILE_SIZE * 5, minPlayerDist - TILE_SIZE);
+                    minFragDist = Math.max(TILE_SIZE * 5, minFragDist - TILE_SIZE);
+                }
+            }
+
+            while(memories.length < maxMemories) {
+                let rx = Math.floor(Math.random() * (mapCols - 4)) + 2;
+                let ry = Math.floor(Math.random() * (mapRows - 4)) + 2;
+                if (mapData[ry][rx] === 0) {
+                    memories.push({ x: rx * TILE_SIZE + TILE_SIZE/2, y: ry * TILE_SIZE + TILE_SIZE/2, active: true, offset: Math.random() * Math.PI * 2 });
+                }
+            }
+
+            particles = [];
+            for(let i=0; i<200; i++) {
+                particles.push({
+                    x: Math.random() * (mapCols * TILE_SIZE), y: Math.random() * (mapRows * TILE_SIZE),
+                    vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, size: Math.random() * 1.5 + 0.5
+                });
+            }
+
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+
+            document.getElementById('noiseLayer').style.opacity = '0.04';
+            document.getElementById('jumpscare-container').style.backgroundImage = JUMPSCARE_IMAGES[currentLevel];
+            deathTimer = 0;
+            
+            if (audio) audio.setLevelTheme(currentLevel);
+            
+            updateHUD();
+            tick = 0;
+        }
+
+        function showMessage(txt) {
+            const msgEl = document.getElementById('center-message');
+            msgEl.innerText = txt;
+            msgEl.style.opacity = 1;
+            setTimeout(() => { msgEl.style.opacity = 0; }, 5000);
+        }
+
+        function updateHUD() {
+            document.getElementById('level-text').innerText = LEVEL_CONFIGS[currentLevel].name;
+            document.getElementById('memories-text').innerText = `Fragments: ${memoriesCollected}/${maxMemories}`;
+            
+            const sanityEl = document.getElementById('sanity-text');
+            sanityEl.innerText = `Lucidity: ${Math.floor(player.sanity)}%`;
+            
+            if (player.sanity < 40) sanityEl.style.color = '#aa9999';
+            else sanityEl.style.color = 'rgba(255, 255, 255, 0.5)';
+
+            if (player.sanity < 30) sanityEl.classList.add('glitch-text');
+            else sanityEl.classList.remove('glitch-text');
+        }
+
+        function checkWallCollision(newX, newY) {
+            const r = player.radius;
+            const corners = [{x: newX - r, y: newY - r}, {x: newX + r, y: newY - r}, {x: newX - r, y: newY + r}, {x: newX + r, y: newY + r}];
+            for (let c of corners) {
+                let gridX = Math.floor(c.x / TILE_SIZE);
+                let gridY = Math.floor(c.y / TILE_SIZE);
+                if (gridX < 0 || gridX >= mapCols || gridY < 0 || gridY >= mapRows || mapData[gridY][gridX] === 1) return true;
+            }
+            return false;
+        }
+
+        function update() {
+            if (deathTimer > 0) { deathTimer++; return; }
+
+            tick++;
+
+            // Movement
+            let dx = 0, dy = 0;
+            if (keys.w || keys.ArrowUp) dy -= PLAYER_SPEED;
+            if (keys.s || keys.ArrowDown) dy += PLAYER_SPEED;
+            if (keys.a || keys.ArrowLeft) dx -= PLAYER_SPEED;
+            if (keys.d || keys.ArrowRight) dx += PLAYER_SPEED;
+
+            if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+
+            if (!checkWallCollision(player.x + dx, player.y)) player.x += dx;
+            if (!checkWallCollision(player.x, player.y + dy)) player.y += dy;
+
+            // Flashlight Angle
+            if (usingMouse) {
+                let screenPlayerX = player.x - camera.x;
+                let screenPlayerY = player.y - camera.y;
+                let targetAngle = Math.atan2(mouseY - screenPlayerY, mouseX - screenPlayerX);
+                
+                let diff = targetAngle - player.angle;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                player.angle += diff * 0.1;
+                
+                // FIX: Normalize the player's angle so it never spins out of bounds
+                player.angle = Math.atan2(Math.sin(player.angle), Math.cos(player.angle));
+            } else if (dx !== 0 || dy !== 0) {
+                let targetAngle = Math.atan2(dy, dx);
+                let diff = targetAngle - player.angle;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                player.angle += diff * 0.1;
+                
+                // FIX: Normalize the player's angle
+                player.angle = Math.atan2(Math.sin(player.angle), Math.cos(player.angle));
+            }
+
+            camera.x += (player.x - canvas.width / 2 - camera.x) * 0.08;
+            camera.y += (player.y - canvas.height / 2 - camera.y) * 0.08;
+
+            // Collect Fragments
+            for (let i = 0; i < memories.length; i++) {
+                let m = memories[i];
+                if (m.active && Math.hypot(player.x - m.x, player.y - m.y) < player.radius + 30) {
+                    m.active = false;
+                    
+                    // Show sequential message to avoid repeats
+                    let msgs = levelMessages[currentLevel];
+                    if (memoriesCollected < msgs.length) {
+                        showMessage(msgs[memoriesCollected]);
+                    }
+                    
+                    memoriesCollected++;
+                    player.sanity = Math.min(100, player.sanity + (30 - (memoriesCollected * 2))); 
+                    
+                    if (memoriesCollected === 1 && !entity.active) {
+                        entity.active = true;
+                        entity.x = player.x + (Math.random() > 0.5 ? 1200 : -1200);
+                        entity.y = player.y + (Math.random() > 0.5 ? 1200 : -1200);
+                    }
+                    updateHUD();
+
+                    if (memoriesCollected >= maxMemories) endGame('win');
+                }
+            }
+
+            // Sanity & Entity Mechanics
+            player.sanity -= 0.015 + (memoriesCollected * 0.005); 
+            
+            let distToEntity = Math.hypot(player.x - entity.x, player.y - entity.y);
+            
+            if (entity.active) {
+                let angleToPlayer = Math.atan2(player.y - entity.y, player.x - entity.x);
+                
+                // SYNC AI WITH ACTUAL VISIBLE LIGHT
+                // Calculate the real-time shrinking radius so it doesn't freeze off-screen in the dark.
+                let currentLightRadius = 700 - (memoriesCollected * 15) - ((100 - player.sanity) * 2);
+                if (currentLightRadius < 150) currentLightRadius = 150;
+
+                // STABLE AI CONE CHECK
+                // We use 85% of the visual radius and a fixed, non-jittering angle. 
+                // This completely prevents both the "stutter-step" bug and the "freezing in darkness" bug.
+                let aiRadius = currentLightRadius * 0.85; 
+                let aiConeSpread = 0.45; 
+                
+                let angleToEntity = Math.atan2(entity.y - player.y, entity.x - player.x);
+                
+                // FIX: Mathematically bulletproof way to calculate the angle difference.
+                // This prevents the AI from freezing randomly if you spin the mouse around in circles!
+                let angleDiff = Math.abs(Math.atan2(Math.sin(angleToEntity - player.angle), Math.cos(angleToEntity - player.angle)));
+                
+                let isLookedAt = (angleDiff <= aiConeSpread && distToEntity <= aiRadius);
+                
+                // LEVEL SPECIFIC MONSTER AI
+                if (currentLevel === 1) {
+                    let currentSpeed = MONSTER_SPEED;
+                    if (distToEntity > 1000) currentSpeed = MONSTER_SPEED * 2.5; 
+                    else if (distToEntity < 300) currentSpeed = MONSTER_SPEED * 0.6; 
+                    
+                    entity.x += Math.cos(angleToPlayer) * currentSpeed;
+                    entity.y += Math.sin(angleToPlayer) * currentSpeed;
+                    
+                    if (distToEntity < 400) {
+                        player.sanity -= 0.05; 
+                        if (isLookedAt) {
+                            player.sanity -= 0.15; document.getElementById('noiseLayer').style.opacity = '0.2';
+                        } else {
+                            document.getElementById('noiseLayer').style.opacity = '0.04';
+                        }
+                    }
+                } 
+                else if (currentLevel === 2) {
+                    let currentSpeed = MONSTER_SPEED * 0.5; 
+                    if (!isLookedAt) {
+                        currentSpeed = MONSTER_SPEED * 2.0; 
+                        if (Math.random() < 0.01) currentSpeed = MONSTER_SPEED * 5.0; // Occasional burst
+                    }
+                    
+                    entity.x += Math.cos(angleToPlayer) * currentSpeed;
+                    entity.y += Math.sin(angleToPlayer) * currentSpeed;
+                    
+                    if (distToEntity < 300) player.sanity -= 0.08;
+                    if (isLookedAt && distToEntity < 400) player.sanity -= 0.1;
+                }
+                else if (currentLevel === 3) {
+                    if (!isLookedAt) {
+                        let currentSpeed = MONSTER_SPEED * 3.5;
+                        entity.x += Math.cos(angleToPlayer) * currentSpeed;
+                        entity.y += Math.sin(angleToPlayer) * currentSpeed;
+                    }
+                    if (distToEntity < 300 && !isLookedAt) player.sanity -= 0.15;
+                    if (distToEntity < 300 && isLookedAt) player.sanity -= 0.02; 
+                }
+
+                entity.phase += 0.15;
+                entity.history.push({x: entity.x, y: entity.y});
+                if (entity.history.length > 25) entity.history.shift();
+
+                if (distToEntity > 1500 && Math.random() < 0.01) {
+                    entity.x = player.x + (Math.random() > 0.5 ? 800 : -800);
+                    entity.y = player.y + (Math.random() > 0.5 ? 800 : -800);
+                    entity.history = [];
+                }
+
+                if (distToEntity < 40) player.sanity = 0;
+            }
+
+            for (let p of particles) {
+                p.x += p.vx; p.y += p.vy;
+                if (p.x < camera.x - 100) p.x = camera.x + canvas.width + 100;
+                if (p.x > camera.x + canvas.width + 100) p.x = camera.x - 100;
+                if (p.y < camera.y - 100) p.y = camera.y + canvas.height + 100;
+                if (p.y > camera.y + canvas.height + 100) p.y = camera.y - 100;
+            }
+
+            if (player.sanity <= 0 && deathTimer === 0) {
+                player.sanity = 0;
+                initiateDeathSequence();
+            }
+
+            if (audio) audio.update(player.sanity, entity.active ? distToEntity : 9999);
+            if(tick % 30 === 0) updateHUD();
+        }
+
+        function initiateDeathSequence() {
+            deathTimer = 1;
+            document.getElementById('ui-layer').style.opacity = '0';
+            document.getElementById('mobile-controls').style.opacity = '0';
+            
+            if (audio) audio.stopAll();
+            
+            setTimeout(() => {
+                if (audio) audio.playJumpscare(currentLevel);
+                document.getElementById('jumpscare-container').style.display = 'block';
+                
+                setTimeout(() => {
+                    document.getElementById('jumpscare-container').style.display = 'none';
+                    endGame('death');
+                }, 900); 
+            }, 2500); 
+        }
+
+        function isPointInCone(px, py, lightRadius, coneSpread) {
+            let dx = px - player.x;
+            let dy = py - player.y;
+            let dist = Math.hypot(dx, dy);
+            if(dist > lightRadius) return 0;
+
+            let angle = Math.atan2(dy, dx);
+            
+            // FIX: Applied the same bulletproof math to the visual dust particles
+            let angleDiff = Math.abs(Math.atan2(Math.sin(angle - player.angle), Math.cos(angle - player.angle)));
+            
+            if(angleDiff <= coneSpread) return 1 - (dist / lightRadius);
+            return 0;
+        }
+
+        function draw() {
+            const config = LEVEL_CONFIGS[currentLevel];
+            
+            ctx.fillStyle = config.floorBase;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            
+            if (player.sanity < 30 && deathTimer === 0) {
+                let drift = Math.sin(tick * 0.05) * (30 - player.sanity) * 0.2;
+                ctx.translate(drift, Math.cos(tick * 0.04) * drift);
+            }
+
+            ctx.translate(-camera.x, -camera.y);
+
+            const startX = Math.max(0, Math.floor(camera.x / TILE_SIZE));
+            const startY = Math.max(0, Math.floor(camera.y / TILE_SIZE));
+            const endX = Math.min(mapCols, startX + Math.ceil(canvas.width / TILE_SIZE) + 1);
+            const endY = Math.min(mapRows, startY + Math.ceil(canvas.height / TILE_SIZE) + 1);
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    let screenX = x * TILE_SIZE;
+                    let screenY = y * TILE_SIZE;
+
+                    if (mapData[y][x] === 1) {
+                        if (currentLevel === 1) {
+                            // Level 1: The Void (Hollow abstract blocks)
+                            ctx.fillStyle = config.wallBase; 
+                            ctx.fillRect(screenX, screenY, TILE_SIZE + 1, TILE_SIZE + 1);
+                            
+                            ctx.strokeStyle = config.wallOuter;
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(screenX + 1, screenY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                            
+                            ctx.fillStyle = config.wallCore;
+                            ctx.fillRect(screenX + 8, screenY + 8, TILE_SIZE - 16, TILE_SIZE - 16);
+                        } else if (currentLevel === 2) {
+                            // Level 2: The Yellow Halls (Unified Wallpaper)
+                            ctx.fillStyle = config.wallBase; 
+                            ctx.fillRect(screenX, screenY, TILE_SIZE + 1, TILE_SIZE + 1);
+                            
+                            // Vertical wallpaper stripes to connect blocks
+                            ctx.fillStyle = config.wallOuter;
+                            for (let i = 0; i < TILE_SIZE; i += 20) {
+                                ctx.fillRect(screenX + i + 8, screenY, 4, TILE_SIZE + 1);
+                            }
+                            
+                            // Baseboard where wall meets floor
+                            if (y < mapRows - 1 && mapData[y + 1][x] === 0) {
+                                ctx.fillStyle = config.wallCore;
+                                ctx.fillRect(screenX, screenY + TILE_SIZE - 8, TILE_SIZE + 1, 8);
+                            }
+                        } else if (currentLevel === 3) {
+                            // Level 3: The White Ward (Sterile Hospital Walls)
+                            ctx.fillStyle = config.wallOuter; 
+                            ctx.fillRect(screenX, screenY, TILE_SIZE + 1, TILE_SIZE + 1);
+                            
+                            // Horizontal hospital medical stripe (Teal)
+                            ctx.fillStyle = '#8ab0b0'; 
+                            ctx.fillRect(screenX, screenY + TILE_SIZE / 2 - 10, TILE_SIZE + 1, 20);
+                            
+                            // Dark baseboard
+                            if (y < mapRows - 1 && mapData[y + 1][x] === 0) {
+                                ctx.fillStyle = config.wallCore;
+                                ctx.fillRect(screenX, screenY + TILE_SIZE - 6, TILE_SIZE + 1, 6);
+                            }
+                        }
+                    } else {
+                        if (currentLevel === 1) {
+                            // Level 1: Minimalist grit floor
+                            ctx.fillStyle = config.floorBase;
+                            ctx.fillRect(screenX, screenY, TILE_SIZE + 1, TILE_SIZE + 1);
+                            if ((x*7 + y*13) % 5 === 0) {
+                                ctx.fillStyle = config.floorGrit;
+                                ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+                            }
+                        } else if (currentLevel === 2) {
+                            // Level 2: Moist Carpet Texture
+                            ctx.fillStyle = config.floorBase;
+                            ctx.fillRect(screenX, screenY, TILE_SIZE + 1, TILE_SIZE + 1);
+                            ctx.fillStyle = config.floorGrit;
+                            for (let i = 0; i < 5; i++) {
+                                let px = (x * 11 + y * 17 + i * 37) % TILE_SIZE;
+                                let py = (x * 13 + y * 19 + i * 41) % TILE_SIZE;
+                                ctx.fillRect(screenX + px, screenY + py, 5, 5);
+                            }
+                        } else if (currentLevel === 3) {
+                            // Level 3: Linoleum Hospital Tiles
+                            ctx.fillStyle = config.floorBase;
+                            ctx.fillRect(screenX, screenY, TILE_SIZE + 1, TILE_SIZE + 1);
+                            
+                            ctx.strokeStyle = config.floorGrit;
+                            ctx.lineWidth = 2;
+                            // 2x2 grid pattern per coordinate
+                            ctx.strokeRect(screenX, screenY, TILE_SIZE/2, TILE_SIZE/2);
+                            ctx.strokeRect(screenX + TILE_SIZE/2, screenY, TILE_SIZE/2, TILE_SIZE/2);
+                            ctx.strokeRect(screenX, screenY + TILE_SIZE/2, TILE_SIZE/2, TILE_SIZE/2);
+                            ctx.strokeRect(screenX + TILE_SIZE/2, screenY + TILE_SIZE/2, TILE_SIZE/2, TILE_SIZE/2);
+                            
+                            // Occasional grime on the clean tiles
+                            if ((x*3 + y*7) % 11 === 0) {
+                                ctx.fillStyle = 'rgba(150, 160, 160, 0.4)';
+                                ctx.fillRect(screenX, screenY, TILE_SIZE/2, TILE_SIZE/2);
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (let m of memories) {
+                if (m.active) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    let pulse = Math.sin(tick * 0.05 + m.offset) * 3;
+                    ctx.beginPath();
+                    ctx.arc(m.x, m.y, 4 + pulse, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = config.fragAura + (0.15 + Math.sin(tick*0.1)*0.08) + ')';
+                    ctx.beginPath();
+                    ctx.arc(m.x, m.y, 40 + pulse*3, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            if (deathTimer < 100) {
+                ctx.translate(player.x, player.y);
+                ctx.rotate(player.angle);
+                
+                ctx.fillStyle = '#3a3e4a';
+                ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI*2); ctx.fill();
+                
+                ctx.fillStyle = '#22252e';
+                ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+                
+                ctx.fillStyle = '#111';
+                ctx.fillRect(8, -5, 10, 10);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowBlur = 5; ctx.shadowColor = '#ffffff';
+                ctx.fillRect(16, -3, 3, 6);
+                ctx.shadowBlur = 0;
+                
+                ctx.rotate(-player.angle);
+                ctx.translate(-player.x, -player.y);
+            }
+
+            // DYNAMIC LIGHTING
+            let darkOpacity = 1.0;
+            lightCtx.clearRect(0, 0, canvas.width, canvas.height);
+            lightCtx.fillStyle = config.lightMask + `${darkOpacity})`;
+            lightCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            lightCtx.globalCompositeOperation = 'destination-out';
+            lightCtx.save();
+            lightCtx.translate(-camera.x, -camera.y);
+
+            let lightRadius = 700 - (memoriesCollected * 15) - ((100 - player.sanity) * 2);
+            
+            if (deathTimer > 0) lightRadius = 0; 
+            if (lightRadius < 150 && deathTimer === 0) lightRadius = 150;
+
+            let coneSpread = 0.5;
+            if(player.sanity < 50) coneSpread = 0.4 + (Math.sin(tick*0.5)*0.05); 
+            if(currentLevel === 3 && Math.random() < 0.05) lightRadius -= 50;
+
+            if (lightRadius > 0) {
+                let coneGrad = lightCtx.createRadialGradient(player.x, player.y, 0, player.x, player.y, lightRadius);
+                // Adjusted gradient to push the bright light further out so the AI freeze feels natural
+                coneGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+                coneGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.6)');
+                coneGrad.addColorStop(0.8, 'rgba(255, 255, 255, 0.1)');
+                coneGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                lightCtx.fillStyle = coneGrad;
+                lightCtx.beginPath();
+                lightCtx.moveTo(player.x, player.y);
+                lightCtx.arc(player.x, player.y, lightRadius, player.angle - coneSpread, player.angle + coneSpread);
+                lightCtx.lineTo(player.x, player.y);
+                lightCtx.fill();
+
+                let ambientGrad = lightCtx.createRadialGradient(player.x, player.y, 0, player.x, player.y, 120);
+                ambientGrad.addColorStop(0, config.ambientGlow);
+                ambientGrad.addColorStop(1, 'rgba(255,255,255,0)');
+                lightCtx.fillStyle = ambientGrad;
+                lightCtx.beginPath();
+                lightCtx.arc(player.x, player.y, 120, 0, Math.PI*2);
+                lightCtx.fill();
+            }
+
+            lightCtx.restore();
+            lightCtx.globalCompositeOperation = 'source-over';
+
+            ctx.restore();
+
+            if (lightCanvas.width > 0 && lightCanvas.height > 0) {
+                ctx.drawImage(lightCanvas, 0, 0);
+            }
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            for (let p of particles) {
+                let intensity = isPointInCone(p.x, p.y, lightRadius, coneSpread);
+                if (intensity > 0) {
+                    ctx.fillStyle = `rgba(150, 160, 170, ${intensity * 0.4})`;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            if (entity.active && deathTimer === 0) {
+                let mDist = Math.hypot(player.x - entity.x, player.y - entity.y);
+                if (mDist < canvas.width * 1.5) { 
+                    
+                    if (currentLevel === 1) {
+                        ctx.lineCap = 'square'; ctx.lineJoin = 'miter';
+                        for(let i=0; i<entity.history.length; i++) {
+                            let h = entity.history[i];
+                            let alpha = i / entity.history.length;
+                            ctx.strokeStyle = `rgba(200, 200, 200, ${alpha * 0.1})`;
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            let size = 20 * alpha;
+                            ctx.strokeRect(h.x - size/2 + (Math.random()*10-5), h.y - size/2 + (Math.random()*10-5), size, size);
+                        }
+
+                        let voidSize = 40 + Math.sin(entity.phase)*10;
+                        let voidGrad = ctx.createRadialGradient(entity.x, entity.y, 0, entity.x, entity.y, voidSize * 2);
+                        voidGrad.addColorStop(0, 'rgba(0,0,0,1)');
+                        voidGrad.addColorStop(0.5, 'rgba(0,0,0,0.9)');
+                        voidGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                        ctx.fillStyle = voidGrad;
+                        ctx.beginPath(); ctx.arc(entity.x, entity.y, voidSize * 2, 0, Math.PI*2); ctx.fill();
+
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        for(let i=0; i<15; i++) {
+                            let angle = (i/15) * Math.PI*2 + entity.phase;
+                            let r = Math.random() * voidSize;
+                            let px = entity.x + Math.cos(angle)*r;
+                            let py = entity.y + Math.sin(angle)*r;
+                            if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                        }
+                        ctx.stroke();
+                    } 
+                    else if (currentLevel === 2) {
+                        ctx.fillStyle = '#111';
+                        for(let i=0; i<3; i++) {
+                            let jitterX = (Math.random() - 0.5) * 15;
+                            let jitterY = (Math.random() - 0.5) * 15;
+                            ctx.fillRect(entity.x - 10 + jitterX, entity.y - 30 + jitterY, 20, 60);
+                        }
+                        let jitterX = (Math.random() - 0.5) * 5;
+                        let jitterY = (Math.random() - 0.5) * 5;
+                        ctx.fillStyle = '#fff';
+                        ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
+                        ctx.fillRect(entity.x - 6 + jitterX, entity.y - 20 + jitterY, 3, 3);
+                        ctx.fillRect(entity.x + 3 + jitterX, entity.y - 20 + jitterY, 3, 3);
+                        ctx.shadowBlur = 0;
+                    }
+                    else if (currentLevel === 3) {
+                        // REVERTED to the working grey visual from the video
+                        ctx.fillStyle = '#8a8e8e'; 
+                        ctx.beginPath(); ctx.arc(entity.x, entity.y, 16, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = '#4a4e4e';
+                        ctx.beginPath(); ctx.arc(entity.x, entity.y + 4, 13, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            if (!isPlaying) return;
+            update();
+            draw();
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function endGame(type) {
+            isPlaying = false;
+            cancelAnimationFrame(gameLoopId);
+            
+            document.getElementById('ui-layer').style.display = 'none';
+            document.getElementById('mobile-controls').style.display = 'none';
+            document.body.style.cursor = 'default';
+            
+            if(type === 'death') {
+                document.getElementById('death-screen').style.display = 'flex';
+                setTimeout(() => { document.getElementById('death-text').style.animation = 'slowFade 4s forwards'; }, 1000);
+                setTimeout(() => { document.getElementById('restart-btn').style.opacity = '1'; }, 4000);
+            } else {
+                if(audio) audio.stopAll();
+                
+                if (currentLevel < 3) {
+                    document.getElementById('level-screen').style.display = 'flex';
+                } else {
+                    document.getElementById('win-screen').style.display = 'flex';
+                }
+            }
+        }
+
+        function startGame(levelNumber) {
+            currentLevel = levelNumber;
+            
+            document.getElementById('menu-screen').style.display = 'none';
+            document.getElementById('death-screen').style.display = 'none';
+            document.getElementById('win-screen').style.display = 'none';
+            document.getElementById('level-screen').style.display = 'none';
+            
+            document.getElementById('death-text').style.animation = 'none';
+            document.getElementById('death-text').style.opacity = '0';
+            document.getElementById('restart-btn').style.opacity = '0';
+            document.getElementById('jumpscare-container').style.display = 'none';
+
+            document.getElementById('ui-layer').style.display = 'flex';
+            document.getElementById('ui-layer').style.opacity = '1';
+            document.body.style.cursor = 'crosshair';
+            
+            if('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                document.getElementById('mobile-controls').style.display = 'flex';
+                document.getElementById('mobile-controls').style.opacity = '1';
+            }
+
+            if (!audio) {
+                audio = new HorrorAudio();
+            } else if (audio.ctx.state === 'suspended') {
+                audio.ctx.resume();
+            } else {
+                audio.stopAll();
+                audio = new HorrorAudio();
+            }
+            
+            initGame();
+            isPlaying = true;
+            gameLoop();
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth || 800;
+            canvas.height = window.innerHeight || 600;
+            lightCanvas.width = window.innerWidth || 800;
+            lightCanvas.height = window.innerHeight || 600;
+            if(isPlaying) draw();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        
+        window.addEventListener('keydown', (e) => { 
+            if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.code)) keys[e.key.length===1 ? e.key.toLowerCase() : e.key] = true; 
+        });
+        window.addEventListener('keyup', (e) => { 
+            if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.code)) keys[e.key.length===1 ? e.key.toLowerCase() : e.key] = false; 
+        });
+
+        window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; usingMouse = true; });
+
+        // Setup Main Menu Level Select Buttons
+        document.getElementById('btn-lvl-1').addEventListener('click', () => startGame(1));
+        document.getElementById('btn-lvl-2').addEventListener('click', () => startGame(2));
+        document.getElementById('btn-lvl-3').addEventListener('click', () => startGame(3));
+        
+        document.getElementById('restart-btn').addEventListener('click', () => startGame(currentLevel));
+        document.getElementById('replay-btn').addEventListener('click', () => startGame(1));
+        
+        document.getElementById('next-level-btn').addEventListener('click', () => {
+            startGame(currentLevel + 1);
+        });
+
+        const bindDpad = (id, key) => {
+            const el = document.getElementById(id);
+            const press = (e) => { e.preventDefault(); keys[key] = true; usingMouse = false; };
+            const release = (e) => { e.preventDefault(); keys[key] = false; };
+            el.addEventListener('touchstart', press); el.addEventListener('touchend', release);
+            el.addEventListener('mousedown', press); el.addEventListener('mouseup', release);
+            el.addEventListener('mouseleave', release);
+        };
+
+        bindDpad('btn-up', 'w'); bindDpad('btn-down', 's'); bindDpad('btn-left', 'a'); bindDpad('btn-right', 'd');
+
+        resizeCanvas();
+        
+        // Initial drawing of empty canvas for main menu
+        ctx.fillStyle = '#020202';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+    </script>
+</body>
+</html>
